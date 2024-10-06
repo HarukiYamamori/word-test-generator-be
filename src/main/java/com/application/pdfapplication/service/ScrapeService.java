@@ -25,7 +25,7 @@ public class ScrapeService {
     private final WordRepository wordRepository;
 
     public final List<Word> data = new ArrayList<>();
-    private String version;
+    private String WORD_BOOK;
     private static final String COMMA = ",";
     private static final String ZENKAKU_COMMA = "、";
     private static final String WORD_LIST = "単語一覧";
@@ -56,11 +56,11 @@ public class ScrapeService {
     public List<Word> scrapeWord(String url, String wordNumHeader, String wordHeader, String wordMeaningHeader) throws IOException {
         Document document = Jsoup.connect(url).get();
 
-        version = document.getElementsByClass("entry-title").text();
-        if(version.contains(IDIOM_LIST)) {
-            version = getSubString(version, "", IDIOM_LIST).trim();
-        } else if (version.contains(WORD_LIST)){
-            version = getSubString(version, "", WORD_LIST).trim();
+        WORD_BOOK = document.getElementsByClass("entry-title").text();
+        if(WORD_BOOK.contains(IDIOM_LIST)) {
+            WORD_BOOK = getSubString(WORD_BOOK, "", IDIOM_LIST).trim();
+        } else if (WORD_BOOK.contains(WORD_LIST)){
+            WORD_BOOK = getSubString(WORD_BOOK, "", WORD_LIST).trim();
         }
 
         Elements rows = document.select(".row-hover > tr");
@@ -70,7 +70,7 @@ public class ScrapeService {
             int wordNum = Integer.parseInt(row.getElementsByClass(getTargetClassNm(document, wordNumHeader)).text());
             String section = parseNumToSection(wordNum);
 
-            Word scrapeDataList = addData(wordNum, version, section, word, wordMeaning);
+            Word scrapeDataList = addData(wordNum, section, WORD_BOOK, word, wordMeaning);
             data.add(scrapeDataList);
         }
 
