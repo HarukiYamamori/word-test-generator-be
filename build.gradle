@@ -1,0 +1,69 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.4'
+    id 'io.spring.dependency-management' version '1.1.6'
+    id "org.openapi.generator" version "7.5.0"
+}
+
+group = 'com.application'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa:3.3.4'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'org.apache.pdfbox:pdfbox:3.0.3'
+    implementation 'org.springframework.boot:spring-boot-starter-validation:3.3.4'
+    implementation 'io.swagger.core.v3:swagger-annotations:2.2.23'
+    implementation 'io.swagger:swagger-annotations:1.6.14'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
+    implementation 'jakarta.validation:jakarta.validation-api:3.1.0'
+    implementation 'org.jsoup:jsoup:1.18.1'
+    implementation 'mysql:mysql-connector-java:8.0.33'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+task buildApiDoc(type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask) {
+    generatorName.set("html2")
+    inputSpec.set("$rootDir/src/main/resources/api-schema.yaml")
+    outputDir.set("$buildDir/apidoc")
+}
+
+task buildSpringServer(type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask) {
+    generatorName.set("spring")
+    inputSpec.set("$rootDir/src/main/resources/api-schema.yaml")
+    outputDir.set("$buildDir/spring")
+    apiPackage.set("com.application.pdfapplication.controller")
+    modelPackage.set("com.application.pdfapplication.model")
+    configOptions.set([
+            interfaceOnly: "true",
+            useSpringBoot3: "true",
+    ])
+}
+
+compileJava.dependsOn tasks.buildSpringServer
+sourceSets.main.java.srcDir "$buildDir/spring/src/main/java"
+
+tasks.bootJar {
+    enabled = true
+}
+
+tasks.jar {
+    enabled = false
+}

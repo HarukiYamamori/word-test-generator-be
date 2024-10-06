@@ -1,0 +1,65 @@
+openapi: "3.0.0"
+info:
+  title: PDF Generator API
+  version: 1.0.0
+  description: Document of PDF generator
+paths:
+  /health-check:
+    get:
+      responses:
+        '200':
+          description: NOT OKAY
+  /generate-pdf:
+    post:
+      summary: Generate PDF from input text
+      operationId: generatePdf
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userInput:
+                  type: string
+      responses:
+        '200':
+          description: PDF generated successfully
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /scrape:
+    get:
+      summary: Scrape data from a webpage and save to database
+      operationId: scrapeDataAndSave
+      parameters:
+        - in: query
+          name: url
+          required: true
+          schema:
+            type: string
+          description: The URL of the webpage to scrape
+        - in: query
+          name: wordNumHeader
+          required: true
+          schema:
+            type: string
+          description: The header name for the word number
+        - in: query
+          name: wordHeader
+          required: true
+          schema:
+            type: string
+          description: The header name for the word
+        - in: query
+          name: wordMeaningHeader
+          required: true
+          schema:
+            type: string
+          description: The header name for the word meaning
+      responses:
+        '200':
+          description: Data scraped and saved successfully

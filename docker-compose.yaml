@@ -1,0 +1,30 @@
+version: '3'
+services:
+  db:
+    image: mysql:8.0.39
+    container_name: mysql-1
+    ports:
+      - "13306:3306"
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+      - ./mysql/log:/var/log/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    environment:
+      MYSQL_DATABASE: word_db
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+
+  app:
+    container_name: pdf-app
+    build: .
+    image: pdf-app-image
+    tty: true
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/word_db
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: rootpassword
