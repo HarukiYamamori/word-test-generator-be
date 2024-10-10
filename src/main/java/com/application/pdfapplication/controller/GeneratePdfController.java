@@ -19,7 +19,6 @@ public class GeneratePdfController implements GeneratePdfApi {
     }
 
     @Override
-    @CrossOrigin(origins = "http://localhost:63343")
     public ResponseEntity<Resource> generatePdf(GeneratePdfRequest generatePdfRequest) {
         return pdfService.generatePdf(generatePdfRequest);
     }
