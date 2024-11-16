@@ -2,7 +2,9 @@ package com.application.pdfapplication.service;
 
 import com.application.pdfapplication.entity.Word;
 import com.application.pdfapplication.model.GenerateTestRequest;
+import com.application.pdfapplication.model.TestItem;
 import com.application.pdfapplication.repository.WordRepository;
+import org.apache.coyote.Response;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -20,7 +22,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -35,62 +42,60 @@ public class CreateTestService {
         this.wordRepository = wordRepository;
     }
 
+
+    public ResponseEntity<List<TestItem>> createTestItemService(GenerateTestRequest generateTestRequest) {
+        String wordBook = generateTestRequest.getWordBook();
+        List<String> sections = generateTestRequest.getSections();
+        int wordNum = generateTestRequest.getWordNum();
+
+        // データ取得
+        List<Word> words = wordRepository.findWordsByBookAndSection(wordBook, sections, wordNum);
+
+        // TestItemのリストを作成
+        List<TestItem> testItemList = words.stream()
+                .map(word -> {
+                    TestItem item = new TestItem();
+                    item.setWordBook(word.wordBook);
+                    item.setWord(word.word);
+                    item.setMeaning(word.meaning);
+                    item.setSection(word.section);
+                    item.setWordNum(word.num);
+                    return item;
+                })
+                .collect(Collectors.toList());
+
+        // 200 OKでレスポンスを返す
+        return ResponseEntity.ok(testItemList);
+    }
+
     public ResponseEntity<Resource> createTestService(GenerateTestRequest generateTestRequest) {
         String wordBook = generateTestRequest.getWordBook();
         List<String> sections = generateTestRequest.getSections();
         int wordNum = generateTestRequest.getWordNum();
 
+        // データ取得
         List<Word> words = wordRepository.findWordsByBookAndSection(wordBook, sections, wordNum);
 
-        try (PDDocument document = new PDDocument()) {
-            // 新しいPDFページを作成
-            PDPage questionPage = new PDPage();
-            document.addPage(questionPage);
+        if (words.isEmpty()) {
+            logger.error("Word list is empty for the given criteria.");
+            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        }
 
+        try (PDDocument document = new PDDocument()) {
             // フォントファイルをロード
             PDFont font = PDType0Font.load(document, getClass().getClassLoader().getResourceAsStream("font-file/MPLUS1p-Regular.ttf"), true);
 
-            try (PDPageContentStream contentStream = new PDPageContentStream(document, questionPage)) {
-                contentStream.setFont(font, 12); // フォントサイズを設定
+            // --- 問題ページの生成 ---
+            PDPage questionPage = new PDPage();
+            document.addPage(questionPage);
+            writeContentToPDF(document, questionPage, words, font, "問題", true);
 
-                int yPosition = 750; // 初期Y座標
-
-                contentStream.beginText();
-                contentStream.newLineAtOffset(50, yPosition);
-                contentStream.showText(words.get(1).wordBook + " (問題)");
-
-                contentStream.newLineAtOffset(0, -35); // 問題タイトルの下に行を移動
-
-                for (int i = 0; i < words.size(); i++) {
-                    contentStream.showText((i + 1) + ". " + words.get(i).getWord());
-                    contentStream.newLineAtOffset(0, -20); // 次の行のY位置を下げる
-                    contentStream.showText("____________________");
-                    contentStream.newLineAtOffset(0, -30); // 次の行のY位置を下げる
-                }
-                contentStream.endText(); // すべてのテキストを追加した後に呼び出す
-            }
-
-            // 新しいPDFページを作成
+            // --- 解答ページの生成 ---
             PDPage answerPage = new PDPage();
             document.addPage(answerPage);
 
-            try (PDPageContentStream contentStream = new PDPageContentStream(document, answerPage)) {
-                contentStream.setFont(font, 12); // フォントサイズを設定
-
-                int yPosition = 750; // 初期Y座標
-
-                contentStream.beginText();
-                contentStream.newLineAtOffset(50, yPosition);
-                contentStream.showText(words.get(1).wordBook + " (解答)");
-
-                contentStream.newLineAtOffset(0, -35); // 解答タイトルの下に行を移動
-
-                for (int i = 0; i < words.size(); i++) {
-                    contentStream.showText((i + 1) + ". " + words.get(i).getMeaning() + "　(" + words.get(i).getSection() + " No." + words.get(i).getNum() + ")");
-                    contentStream.newLineAtOffset(0, -30); // 次の行のY位置を下げる
-                }
-                contentStream.endText(); // すべてのテキストを追加した後に呼び出す
-            }
+            // 解答文の書き込み
+            writeContentToPDF(document, answerPage, words, font, "解答", false);
 
             // PDFをバイト配列に変換
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -101,7 +106,13 @@ public class CreateTestService {
 
             // HTTPレスポンスのヘッダーを設定
             HttpHeaders headers = new HttpHeaders();
-            headers.add("Content-Disposition", "inline; filename=" + words.get(1).wordBook + ".pdf");
+            try {
+                // ファイル名をUTF-8でエンコード
+                String encodedFileName = URLEncoder.encode(wordBook, StandardCharsets.UTF_8.toString()).replaceAll("\\+", "%20"); // スペースを%20に変換
+                headers.add("Content-Disposition", "inline; filename=" + encodedFileName + ".pdf");
+            } catch (UnsupportedEncodingException e) {
+                logger.error("Error encoding file name", e);
+            }
 
             return new ResponseEntity<>(resource, headers, HttpStatus.OK); // PDFを返す
 
@@ -109,6 +120,56 @@ public class CreateTestService {
             // エラーハンドリング
             logger.error("PDF生成中にエラーが発生しました", e);
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // ContentStreamの設定とテキスト描画処理を別メソッドに分割
+    private PDPageContentStream createContentStream(PDDocument document, PDPage page, PDFont font, int fontSize) throws IOException {
+        PDPageContentStream contentStream = new PDPageContentStream(document, page);
+        contentStream.setFont(font, fontSize); // フォントサイズを設定
+        return contentStream;
+    }
+
+    // コンテンツ描画の共通処理
+    private void writeContentToPDF(PDDocument document, PDPage page, List<Word> words, PDFont font, String title, boolean isQuestionPage) throws IOException {
+        try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+            contentStream.setFont(font, 12);
+            int yPosition = 750;
+
+            contentStream.beginText();
+            contentStream.newLineAtOffset(50, yPosition);
+            contentStream.showText(words.get(0).getWordBook() + " (" + title + ")");
+            contentStream.newLineAtOffset(0, -35);
+
+            for (Word word : words) {
+                if (yPosition - (isQuestionPage ? 65 : 40) < 240) {
+                    // 新しいページを作成
+                    page = new PDPage();
+                    document.addPage(page);
+                    contentStream.close(); // 現在のストリームを閉じる
+                    try (PDPageContentStream newContentStream = new PDPageContentStream(document, page)) {
+                        newContentStream.setFont(font, 12);
+                        yPosition = 750;
+                        newContentStream.beginText();
+                        newContentStream.newLineAtOffset(50, yPosition);
+                    }
+                } else {
+
+                    // テキストを描画
+                    contentStream.showText((words.indexOf(word) + 1) + ". ");
+                    if (isQuestionPage) {
+                        contentStream.showText(word.getWord());
+                        contentStream.newLineAtOffset(0, -20);
+                        contentStream.showText("____________________");
+                    } else {
+                        contentStream.showText(word.getMeaning() + " (" + word.getSection() + " No." + word.getNum() + ")");
+                    }
+                    contentStream.newLineAtOffset(0, -30);
+                    yPosition -= isQuestionPage ? 35 : 10;
+                }
+
+                contentStream.endText();
+            }
         }
     }
 }
